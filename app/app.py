@@ -9,16 +9,15 @@ from flask_limiter.util import get_remote_address
 
 app = Flask(__name__)
 
-# Конфигурация безопасности
 app.config.update(
-    SECRET_KEY=os.environ.get('SECRET_KEY', 'development-secret-key-123'),  # В продакшене используйте переменную окружения
+    SECRET_KEY=os.environ.get('SECRET_KEY', os.urandom(24).hex()),
     PERMANENT_SESSION_LIFETIME=timedelta(minutes=30),
-    SESSION_COOKIE_SECURE=False,  # True если используете HTTPS
+    SESSION_COOKIE_SECURE=os.environ.get('SESSION_COOKIE_SECURE', 'False').lower() == 'true',
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
     MAX_CONTENT_LENGTH=16 * 1024 * 1024,
-    DATABASE=os.path.join(app.instance_path, 'users.db'),
-    PREFERRED_URL_SCHEME='http'  # 'https' для продакшена
+    DATABASE=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'instance', 'users.db'),
+    PREFERRED_URL_SCHEME=os.environ.get('PREFERRED_URL_SCHEME', 'http')
 )
 
 # Инициализация Limiter
