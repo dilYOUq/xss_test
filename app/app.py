@@ -2,7 +2,7 @@ import os
 import sqlite3
 from datetime import timedelta
 from markupsafe import escape
-from flask import Flask, render_template, request, redirect, url_for, session, flash
+from flask import Flask, render_template, request, redirect, url_for, session, flash, make_response
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -11,17 +11,17 @@ app = Flask(__name__)
 
 # Конфигурация безопасности
 app.config.update(
-    # Секретный ключ из переменных окружения (в production)
-    SECRET_KEY=os.environ.get('SECRET_KEY') or os.urandom(24),
+    SECRET_KEY=os.environ.get('SECRET_KEY', 'development-secret-key-123'),  # В продакшене используйте переменную окружения
     PERMANENT_SESSION_LIFETIME=timedelta(minutes=30),
-    SESSION_COOKIE_SECURE=True,     # Только HTTPS
-    SESSION_COOKIE_HTTPONLY=True,   # Нет доступа из JavaScript
-    SESSION_COOKIE_SAMESITE='Lax',  # Защита от CSRF
-    MAX_CONTENT_LENGTH=16 * 1024 * 1024,  # Ограничение размера запросов
-    DATABASE=os.path.join(app.instance_path, 'users.db')
+    SESSION_COOKIE_SECURE=False,  # True если используете HTTPS
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    MAX_CONTENT_LENGTH=16 * 1024 * 1024,
+    DATABASE=os.path.join(app.instance_path, 'users.db'),
+    PREFERRED_URL_SCHEME='http'  # 'https' для продакшена
 )
 
-# Инициализация Limiter для защиты от brute-force
+# Инициализация Limiter
 limiter = Limiter(
     app=app,
     key_func=get_remote_address,
@@ -31,18 +31,18 @@ limiter = Limiter(
 # Защитные заголовки
 @app.after_request
 def apply_security_headers(response):
-    security_headers = {
+    headers = {
         'X-Content-Type-Options': 'nosniff',
         'X-Frame-Options': 'SAMEORIGIN',
         'X-XSS-Protection': '1; mode=block',
-        'Content-Security-Policy': "default-src 'self'; script-src 'self'",
+        'Content-Security-Policy': "default-src 'self'",
         'Referrer-Policy': 'strict-origin-when-cross-origin'
     }
-    for header, value in security_headers.items():
+    for header, value in headers.items():
         response.headers[header] = value
     return response
 
-# Инициализация БД с обработкой ошибок
+# Работа с БД
 def get_db():
     db = sqlite3.connect(app.config['DATABASE'])
     db.row_factory = sqlite3.Row
@@ -141,9 +141,12 @@ def login():
                 
                 session['username'] = user['username']
                 session['name'] = user['name']
-                return redirect(url_for('welcome'))
+                
+                # Явное сохранение сессии и перенаправление
+                resp = make_response(redirect(url_for('welcome')))
+                session.modified = True
+                return resp
             else:
-                # Увеличение счетчика неудачных попыток
                 if user:
                     db.execute(
                         'UPDATE users SET failed_login_attempts = failed_login_attempts + 1 WHERE id = ?',
@@ -162,6 +165,7 @@ def login():
 @app.route('/welcome')
 def welcome():
     if 'username' not in session:
+        flash('Пожалуйста, войдите в систему', 'error')
         return redirect(url_for('login'))
     return render_template('welcome.html', name=escape(session['name']))
 
@@ -171,5 +175,4 @@ def logout():
     return redirect(url_for('index'))
 
 if __name__ == '__main__':
-    # В production используйте production-сервер (gunicorn)
-    app.run(debug=False, host='127.0.0.1')
+    app.run(host='0.0.0.0', port=5000, debug=False)
