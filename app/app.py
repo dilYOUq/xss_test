@@ -2,13 +2,13 @@ import os
 import sqlite3
 from datetime import timedelta
 from markupsafe import escape
-from flask import Flask, render_template, request, redirect, url_for, session, flash, make_response
+from flask import Flask, render_template, request, redirect, url_for, session, flash
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from dotenv import load_dotenv
 
-load_dotenv()  # Загружает переменные из .env файла
+load_dotenv()
 
 app = Flask(__name__)
 
@@ -96,18 +96,18 @@ def register():
         if not validate_input(request.form):
             flash('Некорректные данные!', 'error')
             return redirect(url_for('register'))
-        
+
         username = escape(request.form['username'])
         email = escape(request.form['email'])
         password = request.form['password']
         name = escape(request.form['name'])
-        
+
         hashed_password = generate_password_hash(password)
-        
+
         db = get_db()
         try:
             db.execute('INSERT INTO users (username, email, password, name) VALUES (?, ?, ?, ?)',
-                     (username, email, hashed_password, name))
+                       (username, email, hashed_password, name))
             db.commit()
             flash('Регистрация успешна! Теперь вы можете войти.', 'success')
             return redirect(url_for('login'))
@@ -118,7 +118,7 @@ def register():
             flash('Ошибка базы данных', 'error')
         finally:
             db.close()
-    
+
     return render_template('register.html')
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -127,34 +127,27 @@ def login():
     if request.method == 'POST':
         username = escape(request.form['username'])
         password = request.form['password']
-        
+
         db = get_db()
         try:
             user = db.execute(
-                'SELECT * FROM users WHERE username = ?', 
+                'SELECT * FROM users WHERE username = ?',
                 (username,)
             ).fetchone()
-            
+
             if user and check_password_hash(user['password'], password):
                 db.execute(
                     'UPDATE users SET failed_login_attempts = 0 WHERE id = ?',
                     (user['id'],)
                 )
                 db.commit()
-                
+
                 session.clear()
                 session['username'] = user['username']
                 session['name'] = user['name']
                 session.permanent = True
-                
-                resp = make_response(redirect(url_for('welcome')))
-                resp.set_cookie(
-                    'flask_session',
-                    value=request.cookies.get('flask_session', ''),
-                    httponly=True,
-                    samesite='Lax'
-                )
-                return resp
+
+                return redirect(url_for('welcome'))
             else:
                 if user:
                     db.execute(
@@ -168,7 +161,7 @@ def login():
             flash('Ошибка сервера при авторизации', 'error')
         finally:
             db.close()
-    
+
     return render_template('login.html')
 
 @app.route('/welcome')
@@ -176,6 +169,7 @@ def welcome():
     if 'username' not in session:
         flash('Пожалуйста, войдите в систему', 'error')
         return redirect(url_for('login'))
+
     return render_template('welcome.html', name=escape(session['name']))
 
 @app.route('/logout')
