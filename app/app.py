@@ -8,31 +8,30 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv() # Подтягиваем данные из env
 
 app = Flask(__name__)
 
 app.config.update(
     SECRET_KEY=os.environ.get('SECRET_KEY', os.urandom(24).hex()),
-    PERMANENT_SESSION_LIFETIME=timedelta(minutes=30),
-    SESSION_COOKIE_SECURE=False,  # True для HTTPS
-    SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE='Lax',
-    SESSION_COOKIE_NAME='flask_session',
+    PERMANENT_SESSION_LIFETIME=timedelta(minutes=30), # Время жизни сессии
+    SESSION_COOKIE_SECURE=False,
+    SESSION_COOKIE_HTTPONLY=True, # Запрет доступ к кукам через js
+    SESSION_COOKIE_SAMESITE='Lax', # Ограничение отправки кук между сайтами
+    SESSION_COOKIE_NAME='flask_session', # Имя куков (сессии)
     SESSION_COOKIE_DOMAIN=None,
     MAX_CONTENT_LENGTH=16 * 1024 * 1024,
-    DATABASE=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'instance', 'users.db'),
-    PREFERRED_URL_SCHEME='http'
+    DATABASE=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'instance', 'users.db')
 )
 
-# Инициализация Limiter
+# Защита от брутфорса (добавляем ограничение на число неудачных попыток)
 limiter = Limiter(
     app=app,
     key_func=get_remote_address,
     default_limits=["200 per day", "50 per hour"]
 )
 
-# Защитные заголовки
+# Защитные заголовки (безопасность от утечки данных)
 @app.after_request
 def apply_security_headers(response):
     headers = {
@@ -97,16 +96,17 @@ def register():
             flash('Некорректные данные!', 'error')
             return redirect(url_for('register'))
 
+        # escape экранирует опасные символы (><'")
         username = escape(request.form['username'])
         email = escape(request.form['email'])
         password = request.form['password']
         name = escape(request.form['name'])
 
-        hashed_password = generate_password_hash(password)
+        hashed_password = generate_password_hash(password) # Сохраняем хэш пароля, а не тот, что ввел юзер
 
         db = get_db()
         try:
-            db.execute('INSERT INTO users (username, email, password, name) VALUES (?, ?, ?, ?)',
+            db.execute('INSERT INTO users (username, email, password, name) VALUES (?, ?, ?, ?)', # Параметры в запросах
                        (username, email, hashed_password, name))
             db.commit()
             flash('Регистрация успешна! Теперь вы можете войти.', 'success')
